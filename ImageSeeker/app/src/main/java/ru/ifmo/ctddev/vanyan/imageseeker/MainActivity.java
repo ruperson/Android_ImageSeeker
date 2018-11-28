@@ -1,11 +1,21 @@
 package  ru.ifmo.ctddev.vanyan.imageseeker;
 
-import android.os.AsyncTask;
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.LoaderManager;
+import android.support.v4.content.AsyncTaskLoader;
+import android.support.v4.content.Loader;
 import android.support.v7.app.AppCompatActivity;
-import android.view.View;
-import android.widget.EditText;
-import android.widget.TextView;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.SearchView;
+import android.text.TextUtils;
+import android.view.Menu;
+import android.view.MenuItem;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -13,67 +23,131 @@ import org.json.JSONObject;
 
 import ru.ifmo.ctddev.vanyan.imageseeker.utilities.NetworkUtils;
 
-import java.io.IOException;
-import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
-    private EditText sb;
-    private TextView sr;
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<String>, GreenAdapter.ListItemClickListener {
+    private static final int SEARCH_LOADER = 23;
+    private static final String SEARCH_QUERY_URL_EXTRA = "query";
+    private GreenAdapter mAdapter;
+    private RecyclerView mNumbersList;
+
+    @Override
+    public void onListItemClick(String link) {
+        Context context = MainActivity.this;
+        Class destinationActivity = ChildActivity.class;
+        Intent intent = new Intent(context, destinationActivity);
+        intent.putExtra(Intent.EXTRA_TEXT, link);
+        startActivity(intent);
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        sb = findViewById(R.id.search_box);
-        sr = findViewById(R.id.search_results);
+        getSupportLoaderManager().initLoader(SEARCH_LOADER, null, this);
+
+    }
+    void buildRecycler(List<String> small_pics, List<String> big_pics, List<String> description) {
+        mNumbersList = findViewById(R.id.rv_item);
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
+        mNumbersList.setLayoutManager(layoutManager);
+        mNumbersList.setHasFixedSize(true);
+        mAdapter = new GreenAdapter(small_pics, big_pics, description, this);
+        mNumbersList.setAdapter(mAdapter);
     }
 
 
-    private void makeSearchQuery() {
-        String query = sb.getText().toString();
-        URL searchUrl = NetworkUtils.buildUrl(query);
-        new QueryTask().execute(searchUrl);
-    }
+    private void makeSearchQuery(String query) {
+        Bundle queryBundle = new Bundle();
+        queryBundle.putString(SEARCH_QUERY_URL_EXTRA, query);
+        LoaderManager loaderManager = getSupportLoaderManager();
+        Loader<String> searchLoader = loaderManager.getLoader(SEARCH_LOADER);
+        if (searchLoader == null) {
+            loaderManager.initLoader(SEARCH_LOADER, queryBundle, this);
+        } else {
+            loaderManager.restartLoader(SEARCH_LOADER, queryBundle, this);
 
-    public class QueryTask extends AsyncTask<URL, Void, String> {
-        @Override
-        protected String doInBackground(URL... urls) {
-            URL searchURL = urls[0];
-            String searchResults = null;
-            try {
-                searchResults = NetworkUtils.getResponseFromHttpUrl(searchURL);
-            }
-            catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            if (searchResults == null) return null;
-            return searchResults.substring(15, searchResults.length() - 1);
-        }
-
-        @Override
-        protected void onPostExecute(String JSONString) {
-           try {
-               JSONObject allJSON = new JSONObject(JSONString);
-               JSONArray items = allJSON.getJSONArray("items");
-               StringBuilder answer = new StringBuilder();
-               for (int i = 0; i < items.length(); i++ ) {
-                   JSONObject cur = items.getJSONObject(i);
-
-                   answer.append(cur.getString("title"));
-                   answer.append('\n');
-                   answer.append(cur.getString("link"));
-                   answer.append("\n\n");
-               }
-               sr.setText(answer.toString());
-            } catch (JSONException e) {
-                e.printStackTrace();
-           }
         }
     }
 
+    @SuppressLint("StaticFieldLeak")
+    @NonNull
+    @Override
+    public Loader<String> onCreateLoader(int i, @Nullable final Bundle args) {
+        return new AsyncTaskLoader<String>(this) {
 
-    public void go(View view) {
-        makeSearchQuery();
+            @Override
+            protected void onStartLoading() {
+                super.onStartLoading();
+                if (args == null) {
+                    return;
+                }
+                forceLoad();
+            }
+
+            @Nullable
+            @Override
+            public String loadInBackground() {
+                String searchString = args.getString(SEARCH_QUERY_URL_EXTRA);
+                if (searchString == null || TextUtils.isEmpty(searchString)) {
+                    return null;
+                }
+                return NetworkUtils.getResponseFromHttpUrl(searchString);
+            }
+        };
     }
+
+    @Override
+    public void onLoadFinished(@NonNull Loader<String> loader, String JSONString) {
+        try {
+            JSONObject allJSON = new JSONObject(JSONString);
+            JSONArray items = allJSON.getJSONArray("results");
+            List<String>  small_pic = new ArrayList<>();
+            List<String>  big_pic = new ArrayList<>();
+            List<String>  description = new ArrayList<>();
+            for (int i = 0; i < items.length(); i++ ) {
+                JSONObject cur = items.getJSONObject(i);
+                description.add(cur.getString("description"));
+                JSONObject urls = cur.optJSONObject("urls");
+
+                small_pic.add(urls.getString("thumb"));
+                big_pic.add(urls.getString("full"));
+
+            }
+            buildRecycler(small_pic, big_pic, description);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onLoaderReset(@NonNull Loader<String> loader) {}
+
+
+    @Override
+    public boolean onCreateOptionsMenu( Menu menu) {
+        getMenuInflater().inflate( R.menu.menu, menu);
+
+        final MenuItem myActionMenuItem = menu.findItem( R.id.action_search);
+        final SearchView searchView = (SearchView) myActionMenuItem.getActionView();
+        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                makeSearchQuery(query);
+                if( ! searchView.isIconified()) {
+                    searchView.setIconified(true);
+                }
+                myActionMenuItem.collapseActionView();
+                return false;
+            }
+            @Override
+            public boolean onQueryTextChange(String s) {
+                return false;
+            }
+        });
+        return true;
+    }
+
 }

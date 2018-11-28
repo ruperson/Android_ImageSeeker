@@ -18,42 +18,29 @@ package ru.ifmo.ctddev.vanyan.imageseeker.utilities;
 import android.net.Uri;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.Scanner;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 
 public class NetworkUtils {
-    public static URL buildUrl(String searchQuery) {
-        Uri builtUri = Uri.parse("https://api.flickr.com/services/feeds/photos_public.gne").buildUpon()
-                .appendQueryParameter("tags", searchQuery)
-                .appendQueryParameter("format", "json")
+    public static String getResponseFromHttpUrl(String searchQuery) {
+        Uri builtUri = Uri.parse("https://api.unsplash.com/search/photos/").buildUpon()
+                .appendQueryParameter("query", searchQuery)
+                .appendQueryParameter("per_page", "50")
+                .appendQueryParameter("client_id", "SUPADUPASECRETKEY")
                 .build();
-        URL url = null;
+
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder().get().url(builtUri.toString()).build();
+        String contentAsString = null;
         try {
-            url = new URL(builtUri.toString());
-        } catch (MalformedURLException e) {
+            Response response = client.newCall(request).execute();
+            contentAsString = response.body().string();
+        } catch (IOException e) {
             e.printStackTrace();
         }
-        return url;
-    }
-
-    public static String getResponseFromHttpUrl(URL url) throws IOException {
-        HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
-        try {
-            InputStream in = urlConnection.getInputStream();
-            Scanner scanner = new Scanner(in);
-            scanner.useDelimiter("\\A");
-            boolean hasInput = scanner.hasNext();
-            if (hasInput) {
-                return scanner.next();
-            } else {
-                return null;
-            }
-        } finally {
-            urlConnection.disconnect();
-        }
+        return contentAsString;
     }
 }
