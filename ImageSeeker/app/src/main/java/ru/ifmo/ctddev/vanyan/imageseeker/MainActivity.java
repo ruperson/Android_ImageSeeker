@@ -14,6 +14,7 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.SearchView;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -26,11 +27,22 @@ import ru.ifmo.ctddev.vanyan.imageseeker.utilities.NetworkUtils;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonParseException;
+import com.google.gson.reflect.TypeToken;
+
+
+
 public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<String>, GreenAdapter.ListItemClickListener {
     private static final int SEARCH_LOADER = 23;
     private static final String SEARCH_QUERY_URL_EXTRA = "query";
+    private static final String SEARCH_KEY = "search_key";
     private GreenAdapter mAdapter;
     private RecyclerView mNumbersList;
+    private SearchView  searchView;
+    private String searchString;
 
     @Override
     public void onListItemClick(String link) {
@@ -47,8 +59,21 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         getSupportLoaderManager().initLoader(SEARCH_LOADER, null, this);
+        if (savedInstanceState != null) {
+            searchString = savedInstanceState.getString(SEARCH_KEY);
+        }
 
     }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (searchView != null) {
+            searchString = searchView.getQuery().toString();
+            outState.putString(SEARCH_KEY, searchString);
+        }
+    }
+
     void buildRecycler(List<String> small_pics, List<String> big_pics, List<String> description) {
         mNumbersList = findViewById(R.id.rv_item);
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
@@ -75,8 +100,9 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     @SuppressLint("StaticFieldLeak")
     @NonNull
     @Override
+
     public Loader<String> onCreateLoader(int i, @Nullable final Bundle args) {
-        return new AsyncTaskLoader<String>(this) {
+        return new AsyncTaskLoader<String>(this) { //my mama said this won't leak
 
             @Override
             protected void onStartLoading() {
@@ -98,6 +124,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             }
         };
     }
+
 
     @Override
     public void onLoadFinished(@NonNull Loader<String> loader, String JSONString) {
@@ -131,7 +158,12 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         getMenuInflater().inflate( R.menu.menu, menu);
 
         final MenuItem myActionMenuItem = menu.findItem( R.id.action_search);
-        final SearchView searchView = (SearchView) myActionMenuItem.getActionView();
+        searchView = (SearchView) myActionMenuItem.getActionView();
+        if (searchString != null) {
+            myActionMenuItem.expandActionView();
+            searchView.setQuery(searchString, true);
+            Log.d("SEARCH INPUT FOR NOW IS", searchString);
+        }
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
