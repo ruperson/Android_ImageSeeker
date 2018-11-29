@@ -18,21 +18,13 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
+import ru.ifmo.ctddev.vanyan.imageseeker.utilities.DeserializeDataJson;
 import ru.ifmo.ctddev.vanyan.imageseeker.utilities.NetworkUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonIOException;
-import com.google.gson.JsonParseException;
-import com.google.gson.reflect.TypeToken;
-
 
 
 public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<String>, GreenAdapter.ListItemClickListener {
@@ -102,7 +94,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     @Override
 
     public Loader<String> onCreateLoader(int i, @Nullable final Bundle args) {
-        return new AsyncTaskLoader<String>(this) { //my mama said this won't leak
+        return new AsyncTaskLoader<String>(this) { // this won't leak
 
             @Override
             protected void onStartLoading() {
@@ -128,25 +120,19 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
     @Override
     public void onLoadFinished(@NonNull Loader<String> loader, String JSONString) {
-        try {
-            JSONObject allJSON = new JSONObject(JSONString);
-            JSONArray items = allJSON.getJSONArray("results");
-            List<String>  small_pic = new ArrayList<>();
-            List<String>  big_pic = new ArrayList<>();
-            List<String>  description = new ArrayList<>();
-            for (int i = 0; i < items.length(); i++ ) {
-                JSONObject cur = items.getJSONObject(i);
-                description.add(cur.getString("description"));
-                JSONObject urls = cur.optJSONObject("urls");
+        Gson gson = new Gson();
+        DeserializeDataJson respond = gson.fromJson(JSONString, DeserializeDataJson.class);
 
-                small_pic.add(urls.getString("thumb"));
-                big_pic.add(urls.getString("full"));
+        List<String> small_pic = new ArrayList<>();
+        List<String> big_pic = new ArrayList<>();
+        List<String> description = new ArrayList<>();
 
-            }
-            buildRecycler(small_pic, big_pic, description);
-        } catch (JSONException e) {
-            e.printStackTrace();
+        for (DeserializeDataJson.Photo p : respond.results) {
+            small_pic.add(p.urls.thumb);
+            big_pic.add(p.urls.full);
+            description.add(p.description);
         }
+        buildRecycler(small_pic, big_pic, description);
     }
 
     @Override
@@ -159,7 +145,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
         final MenuItem myActionMenuItem = menu.findItem( R.id.action_search);
         searchView = (SearchView) myActionMenuItem.getActionView();
-        if (searchString != null) {
+        if (searchString != null && !TextUtils.isEmpty(searchString)) {
             myActionMenuItem.expandActionView();
             searchView.setQuery(searchString, true);
             Log.d("SEARCH INPUT FOR NOW IS", searchString);

@@ -41,7 +41,7 @@ public class ChildActivity extends Activity {
                 }
             });
         } else {
-            Log.d("BUYAKA", "#" + "Activity started in a strange way");
+            Log.d("IT'S A SMACHNOEPADENIE", "#" + "Activity started in a strange way");
             exit(1);
         }
     }
