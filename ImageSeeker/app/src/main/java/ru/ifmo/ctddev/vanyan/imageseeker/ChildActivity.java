@@ -41,8 +41,8 @@ public class ChildActivity extends Activity {
                 }
             });
         } else {
-            Log.d("IT'S A SMACHNOEPADENIE", "#" + "Activity started in a strange way");
-            exit(1);
+            Log.wtf("IT'S A SMACHNOEPADENIE", "#" + "Activity started in a strange way");
+            throw new IllegalStateException("this should never happen");
         }
     }
 }

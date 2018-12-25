@@ -25,6 +25,7 @@ import okhttp3.Response;
 
 
 public class NetworkUtils {
+    static OkHttpClient client = new OkHttpClient();
     public static String getResponseFromHttpUrl(String searchQuery) {
         Uri builtUri = Uri.parse("https://api.unsplash.com/search/photos/").buildUpon()
                 .appendQueryParameter("query", searchQuery)
@@ -32,7 +33,6 @@ public class NetworkUtils {
                 .appendQueryParameter("client_id", "SUPADUPASECRETKEY")
                 .build();
 
-        OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder().get().url(builtUri.toString()).build();
         String contentAsString = null;
         try {
