@@ -1,14 +1,11 @@
 package  ru.ifmo.ctddev.vanyan.imageseeker;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.AsyncTaskLoader;
-import android.support.v4.content.Loader;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -17,24 +14,48 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
+import lombok.SneakyThrows;
+import lombok.val;
+import okhttp3.OkHttpClient;
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.moshi.MoshiConverterFactory;
 import ru.ifmo.ctddev.vanyan.imageseeker.utilities.DeserializeDataJson;
-import ru.ifmo.ctddev.vanyan.imageseeker.utilities.NetworkUtils;
+import ru.ifmo.ctddev.vanyan.imageseeker.utilities.UnsplashApi;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.gson.Gson;
+import com.squareup.moshi.Moshi;
+import com.squareup.picasso.Picasso;
 
 
-public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<String>, GreenAdapter.ListItemClickListener {
-    private static final int SEARCH_LOADER = 23;
+public class MainActivity extends AppCompatActivity implements  GreenAdapter.ListItemClickListener {
     private static final String SEARCH_QUERY_URL_EXTRA = "query";
     private static final String SEARCH_KEY = "search_key";
     private GreenAdapter mAdapter;
     private RecyclerView mNumbersList;
     private SearchView  searchView;
     private String searchString;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    OkHttpClient client;
+    Moshi moshi;
+    Call<DeserializeDataJson> userCall;
+    UnsplashApi api;
+    private UnsplashApi createApi() {
+        return new Retrofit.Builder()
+                .baseUrl("https://api.unsplash.com/")
+                .client(client)
+                .addConverterFactory(MoshiConverterFactory.create(moshi))
+                .build()
+                .create(UnsplashApi.class);
+    }
 
     @Override
     public void onListItemClick(String link) {
@@ -50,7 +71,11 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        getSupportLoaderManager().initLoader(SEARCH_LOADER, null, this);
+        if (client == null) {
+            client = new OkHttpClient.Builder().build();
+            moshi = new Moshi.Builder().build();
+            api = createApi();
+        }
         if (savedInstanceState != null) {
             searchString = savedInstanceState.getString(SEARCH_KEY);
         }
@@ -79,64 +104,51 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private void makeSearchQuery(String query) {
         Bundle queryBundle = new Bundle();
         queryBundle.putString(SEARCH_QUERY_URL_EXTRA, query);
-        LoaderManager loaderManager = getSupportLoaderManager();
-        Loader<String> searchLoader = loaderManager.getLoader(SEARCH_LOADER);
-        if (searchLoader == null) {
-            loaderManager.initLoader(SEARCH_LOADER, queryBundle, this);
-        } else {
-            loaderManager.restartLoader(SEARCH_LOADER, queryBundle, this);
 
-        }
-    }
 
-    @SuppressLint("StaticFieldLeak")
-    @NonNull
-    @Override
 
-    public Loader<String> onCreateLoader(int i, @Nullable final Bundle args) {
-        return new AsyncTaskLoader<String>(this) { // this won't leak
-
+        if (userCall != null)
+            userCall.cancel();
+        userCall = api.getContributors(query);
+        //As role model: https://github.com/Android-ITMO-2018/GHAPI/commit/e3c539f150ea7255da80a5d4e567271dcd68bb6e
+        userCall.enqueue(new Callback<DeserializeDataJson>() {
             @Override
-            protected void onStartLoading() {
-                super.onStartLoading();
-                if (args == null) {
+            @SneakyThrows
+            public void onResponse(@NonNull Call<DeserializeDataJson> call, @NonNull Response<DeserializeDataJson> response) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    final ResponseBody errorBody = response.errorBody();
+                    final String str = errorBody == null ? null : errorBody.string();
+                    onFailure(call, new Throwable(str));
                     return;
                 }
-                forceLoad();
+                val respond = response.body();
+                handler.post(() -> {
+                    List<String> small_pic = new ArrayList<>();
+                    List<String> big_pic = new ArrayList<>();
+                    List<String> description = new ArrayList<>();
+
+                    for (DeserializeDataJson.Photo p : respond.results) {
+                        small_pic.add(p.urls.thumb);
+                        big_pic.add(p.urls.full);
+                        description.add(p.description);
+                    }
+                    buildRecycler(small_pic, big_pic, description);
+
+                });
             }
 
-            @Nullable
             @Override
-            public String loadInBackground() {
-                String searchString = args.getString(SEARCH_QUERY_URL_EXTRA);
-                if (searchString == null || TextUtils.isEmpty(searchString)) {
-                    return null;
-                }
-                return NetworkUtils.getResponseFromHttpUrl(searchString);
+            public void onFailure(@NonNull Call<DeserializeDataJson> call, @NonNull Throwable t) {
+                handler.post(() -> {
+                    Toast.makeText(
+                            MainActivity.this,
+                            t.getLocalizedMessage(),
+                            Toast.LENGTH_LONG)
+                            .show();
+                });
             }
-        };
+        });
     }
-
-
-    @Override
-    public void onLoadFinished(@NonNull Loader<String> loader, String JSONString) {
-        Gson gson = new Gson();
-        DeserializeDataJson respond = gson.fromJson(JSONString, DeserializeDataJson.class);
-
-        List<String> small_pic = new ArrayList<>();
-        List<String> big_pic = new ArrayList<>();
-        List<String> description = new ArrayList<>();
-
-        for (DeserializeDataJson.Photo p : respond.results) {
-            small_pic.add(p.urls.thumb);
-            big_pic.add(p.urls.full);
-            description.add(p.description);
-        }
-        buildRecycler(small_pic, big_pic, description);
-    }
-
-    @Override
-    public void onLoaderReset(@NonNull Loader<String> loader) {}
 
 
     @Override
@@ -168,4 +180,11 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         return true;
     }
 
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (userCall != null) userCall.cancel();
+        Picasso.get().cancelTag(MainActivity.class);
+    }
 }

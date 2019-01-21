@@ -6,11 +6,11 @@ import java.util.List;
 public class DeserializeDataJson {
     public List<Photo> results = new ArrayList<>();
 
-    public class Photo {
+    static public class Photo {
         public String description;
         public Urls urls;
 
-        public class Urls {
+        static public class Urls {
             public String full;
             public String thumb;
         }
