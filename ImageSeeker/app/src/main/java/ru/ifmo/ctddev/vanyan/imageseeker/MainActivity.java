@@ -1,7 +1,10 @@
 package  ru.ifmo.ctddev.vanyan.imageseeker;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,8 +28,12 @@ import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.moshi.MoshiConverterFactory;
+import ru.ifmo.ctddev.vanyan.imageseeker.utilities.DbHelper;
 import ru.ifmo.ctddev.vanyan.imageseeker.utilities.DeserializeDataJson;
 import ru.ifmo.ctddev.vanyan.imageseeker.utilities.UnsplashApi;
+
+import ru.ifmo.ctddev.vanyan.imageseeker.utilities.Contract.Entry;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,13 +64,19 @@ public class MainActivity extends AppCompatActivity implements  GreenAdapter.Lis
                 .create(UnsplashApi.class);
     }
 
+    private DbHelper mDbHelper;
+
     @Override
-    public void onListItemClick(String link) {
+    public void onListItemClick(String small_pic, String big_pic, String descr, Boolean fromSearch) {
         Context context = MainActivity.this;
         Class destinationActivity = ChildActivity.class;
         Intent intent = new Intent(context, destinationActivity);
-        intent.putExtra(Intent.EXTRA_TEXT, link);
+        intent.putExtra(Intent.EXTRA_TEXT, big_pic);
         startActivity(intent);
+
+        if (fromSearch) {
+            insertPhoto(small_pic, big_pic, descr);
+        }
     }
 
 
@@ -80,7 +93,63 @@ public class MainActivity extends AppCompatActivity implements  GreenAdapter.Lis
             searchString = savedInstanceState.getString(SEARCH_KEY);
         }
 
+
+        mDbHelper = new DbHelper(this);
+
+        displayDatabaseInfo();
     }
+    private void displayDatabaseInfo() {
+        SQLiteDatabase db = mDbHelper.getReadableDatabase();
+
+        //Cursor cursor = db.rawQuery("SELECT * FROM " + Entry.TABLE_NAME, null);
+        String[] projection = {
+                Entry._ID,
+                Entry.COLUMN_SMALL_PHOTO,
+                Entry.COLUMN_BIG_PHOTO,
+                Entry.COLUMN_DESCRIPTION};
+
+        try (Cursor cursor = db.query(Entry.TABLE_NAME, projection,null,null,null,null,null)) {
+            Toast.makeText(this, "You have " + cursor.getCount() + " photos in the database", Toast.LENGTH_SHORT).show();
+
+            int nameColumnIndex = cursor.getColumnIndex(Entry.COLUMN_SMALL_PHOTO);
+            int breedColumnIndex = cursor.getColumnIndex(Entry.COLUMN_BIG_PHOTO);
+            int genderColumnIndex = cursor.getColumnIndex(Entry.COLUMN_DESCRIPTION);
+
+            List<String> small_pic = new ArrayList<>();
+            List<String> big_pic = new ArrayList<>();
+            List<String> description = new ArrayList<>();
+
+            while (cursor.moveToNext()) {
+                String currentName = cursor.getString(nameColumnIndex);
+                String currentBreed = cursor.getString(breedColumnIndex);
+                String currentGender = cursor.getString(genderColumnIndex);
+
+                small_pic.add(currentName);
+                big_pic.add(currentBreed);
+                description.add(currentGender);
+            }
+            if (small_pic.size() > 0) {
+                buildRecycler(small_pic, big_pic, description, false);
+            }
+        }
+    }
+
+    private void insertPhoto(String small_photo, String big_photo, String description) {
+        SQLiteDatabase db = mDbHelper.getWritableDatabase();
+
+        ContentValues values = new ContentValues();
+        values.put(Entry.COLUMN_SMALL_PHOTO, small_photo);
+        values.put(Entry.COLUMN_BIG_PHOTO, big_photo);
+        values.put(Entry.COLUMN_DESCRIPTION, description);
+
+        long newRowId = db.insert(Entry.TABLE_NAME, null, values);
+        if (newRowId == -1) {
+            Toast.makeText(this, "Error with saving photo", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Photo added to the database with the number: " + newRowId, Toast.LENGTH_SHORT).show();
+        }
+    }
+
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
@@ -91,12 +160,12 @@ public class MainActivity extends AppCompatActivity implements  GreenAdapter.Lis
         }
     }
 
-    void buildRecycler(List<String> small_pics, List<String> big_pics, List<String> description) {
+    void buildRecycler(List<String> small_pics, List<String> big_pics, List<String> description, Boolean fromSearch) {
         mNumbersList = findViewById(R.id.rv_item);
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
         mNumbersList.setLayoutManager(layoutManager);
         mNumbersList.setHasFixedSize(true);
-        mAdapter = new GreenAdapter(small_pics, big_pics, description, this);
+        mAdapter = new GreenAdapter(small_pics, big_pics, description, fromSearch, this);
         mNumbersList.setAdapter(mAdapter);
     }
 
@@ -132,7 +201,7 @@ public class MainActivity extends AppCompatActivity implements  GreenAdapter.Lis
                         big_pic.add(p.urls.full);
                         description.add(p.description);
                     }
-                    buildRecycler(small_pic, big_pic, description);
+                    buildRecycler(small_pic, big_pic, description, true);
 
                 });
             }

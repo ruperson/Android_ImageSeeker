@@ -21,15 +21,17 @@ public class GreenAdapter extends RecyclerView.Adapter<GreenAdapter.NumberViewHo
     private List<String> small_pics;
     private List<String> big_pics ;
     private List<String> descr;
+    private Boolean fromSearch;
 
     public interface ListItemClickListener {
-        void onListItemClick(String link);
+        void onListItemClick(String a, String b, String c, Boolean d);
     }
 
-    public GreenAdapter(List<String> small_pics, List<String> big_pics, List<String> descr, ListItemClickListener listener) {
+    public GreenAdapter(List<String> small_pics, List<String> big_pics, List<String> descr, Boolean fromSearch, ListItemClickListener listener) {
         this.small_pics = small_pics;
         this.big_pics = big_pics;
         this.descr = descr;
+        this.fromSearch = fromSearch;
         mOnClickListener = listener;
     }
 
@@ -75,7 +77,8 @@ public class GreenAdapter extends RecyclerView.Adapter<GreenAdapter.NumberViewHo
         @Override
         public void onClick(View v) {
             int clickedPosition = getAdapterPosition();
-            mOnClickListener.onListItemClick(big_pics.get(clickedPosition));
+            mOnClickListener.onListItemClick(small_pics.get(clickedPosition), big_pics.get(clickedPosition), descr.get(clickedPosition), fromSearch);
+
         }
     }
 }
